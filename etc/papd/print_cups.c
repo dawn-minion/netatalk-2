@@ -137,10 +137,7 @@ cups_printername_ok(char *name)         /* I - Name of printer */
         *    printer-uri
         */
 
-        request = ippNew();
-
-        request->request.op.operation_id = IPP_GET_PRINTER_ATTRIBUTES;
-        request->request.op.request_id   = 1;
+        request = ippNewRequest(IPP_GET_PRINTER_ATTRIBUTES);;
 
         language = cupsLangDefault();
 
@@ -172,10 +169,10 @@ cups_printername_ok(char *name)         /* I - Name of printer */
 
         httpClose(http);
 
-        if (response->request.status.status_code >= IPP_OK_CONFLICT)
+        if (ippGetStatusCode(request) >= IPP_OK_CONFLICT)
         {
       		LOG(log_error, logtype_papd, "Unable to get printer status for %s - %s", name,
-                         ippErrorString(response->request.status.status_code));
+                         ippErrorString(ippGetStatusCode(request)));
                 ippDelete(response);
                 return (0);
         }
@@ -188,7 +185,7 @@ cups_printername_ok(char *name)         /* I - Name of printer */
 	return (0);
 }
 
-const char * 
+const char *
 cups_get_printer_ppd ( char * name)
 {
 	cupsSetPasswordCB(cups_passwd_cb);
@@ -249,10 +246,7 @@ cups_get_printer_status (struct printer *pr)
         *    printer-uri
         */
 
-        request = ippNew();
-
-        request->request.op.operation_id = IPP_GET_PRINTER_ATTRIBUTES;
-        request->request.op.request_id   = 1;
+        request = ippNewRequest(IPP_GET_PRINTER_ATTRIBUTES);;
 
         language = cupsLangDefault();
 
@@ -282,10 +276,10 @@ cups_get_printer_status (struct printer *pr)
                 return (0);
         }
 
-        if (response->request.status.status_code >= IPP_OK_CONFLICT)
+        if (ippGetStatusCode(request) >= IPP_OK_CONFLICT)
         {
       		LOG(log_error, logtype_papd, "Unable to get printer status for %s - %s", pr->p_printer,
-                         ippErrorString(response->request.status.status_code));
+                         ippErrorString(ippGetStatusCode(request)));
                 ippDelete(response);
                 httpClose(http);
                 return (0);
@@ -299,32 +293,32 @@ cups_get_printer_status (struct printer *pr)
 
         if ((attr = ippFindAttribute(response, "printer-state", IPP_TAG_ENUM)) != NULL)
         {
-                if (attr->values[0].integer == IPP_PRINTER_STOPPED)
-			status = 1;
-                else if (attr->values[0].integer == IPP_NOT_ACCEPTING)
-			status = 0;
+            if (ippGetInteger(attr, 0) == IPP_PRINTER_STOPPED)
+			    status = 1;
+            else if (ippGetInteger(attr, 0) == IPP_NOT_ACCEPTING)
+			    status = 0;
 		else
 			status = 2;
         }
 
 	if ((attr = ippFindAttribute(response, "printer-is-accepting-jobs", IPP_TAG_BOOLEAN)) != NULL)
 	{
-		if ( attr->values[0].integer == 0 ) 
+		if (ippGetInteger(attr, 0) == 0 )
 			status = 0;
 	}
-		
+
 	snprintf ( pr->p_status, 255, cups_status_msg[status], pr->p_printer );
 
-        if ((attr = ippFindAttribute(response, "printer-state-message", IPP_TAG_TEXT)) != NULL)
-		strncat ( pr->p_status, attr->values[0].string.text, 255-strlen(pr->p_status));
+    if ((attr = ippFindAttribute(response, "printer-state-message", IPP_TAG_TEXT)) != NULL)
+        strncat ( pr->p_status, ippGetString(attr, 0, NULL), 255-strlen(pr->p_status));
 
-        ippDelete(response);
+    ippDelete(response);
 
-       /*
-        * Return the print status ...
-        */
+   /*
+    * Return the print status ...
+    */
 
-        httpClose(http);
+    httpClose(http);
 
 	return (status);
 }
@@ -359,14 +353,14 @@ int cups_print_job ( char * name, char *filename, char *job, char *username, cha
 	{
               num_options = cupsParseOptions(cupsoptions, num_options, &options);
 	}
-	
+
 	strlcpy ( filepath, SPOOLDIR, sizeof(filepath));
 	strlcat ( filepath , "/", sizeof(filepath));
 	strlcat ( filepath , filename, sizeof(filepath));
-	
+
 	if ((jobid = cupsPrintFile( name, filepath, job, 0, options)) == 0)
 		LOG(log_error, logtype_papd, "Unable to print job '%s' (%s) to printer '%s' for user '%s' - CUPS error : '%s'", job, filepath, name, username, ippErrorString(cupsLastError()));
-	else 
+	else
 		LOG(log_info, logtype_papd, "Job '%s' queued to printer '%s' with id '%d'", job, name, jobid);
 
 	cupsFreeOptions(num_options, options);
@@ -395,11 +389,11 @@ cups_autoadd_printers ( struct printer	*defprinter, struct printer *printers)
 			LOG(log_error, logtype_papd, "malloc: %s", strerror(errno) );
 			exit( 1 );
 		}
-	
+
 		memcpy( pr, defprinter, sizeof( struct printer ) );
 
 		/* convert from CUPS to local encoding */
-                convert_string_allocate( add_charset(cupsLangEncoding(language)), CH_UNIX, 
+                convert_string_allocate( add_charset(cupsLangEncoding(language)), CH_UNIX,
                                          dests[i].name, -1, &pr->p_u_name);
 
 		/* convert CUPS name to Mac charset */
@@ -421,12 +415,12 @@ cups_autoadd_printers ( struct printer	*defprinter, struct printer *printers)
 		pr->p_flags |= P_SPOOLED;
 		pr->p_flags |= P_CUPS;
 		pr->p_flags |= P_CUPS_AUTOADDED;
-			
+
 		if (( pr->p_printer = (char *)malloc( strlen( dests[i].name ) + 1 )) == NULL ) {
 			LOG(log_error, logtype_papd, "malloc: %s", strerror(errno) );
                		exit( 1 );
         	}
-        	strcpy( pr->p_printer, dests[i].name );			
+        	strcpy( pr->p_printer, dests[i].name );
 
         	if ( (p = (char *) cups_get_printer_ppd ( pr->p_printer )) != NULL ) {
         		if (( pr->p_ppdfile = (char *)malloc( strlen( p ) + 1 )) == NULL ) {
@@ -437,7 +431,7 @@ cups_autoadd_printers ( struct printer	*defprinter, struct printer *printers)
 			pr->p_flags |= P_CUPS_PPD;
         	}
 
-		if ( (ret = cups_check_printer ( pr, printers, 0)) == -1) 
+		if ( (ret = cups_check_printer ( pr, printers, 0)) == -1)
 			ret = cups_mangle_printer_name ( pr, printers );
 
 		if (ret) {
@@ -449,7 +443,7 @@ cups_autoadd_printers ( struct printer	*defprinter, struct printer *printers)
 			printers = pr;
 		}
 	}
- 
+
         cupsFreeDests(num_dests, dests);
         cupsLangFree(language);
 
@@ -473,11 +467,11 @@ static int cups_mangle_printer_name ( struct printer *pr, struct printer *printe
 	count = 1;
 	name_len = strlen (pr->p_name);
 	strncpy ( name, pr->p_name, MAXCHOOSERLEN-3);
-	
+
 	/* Reallocate necessary space */
 	(name_len >= MAXCHOOSERLEN-3) ? (name_len = MAXCHOOSERLEN+1) : (name_len = name_len + 4);
 	pr->p_name = (char *) realloc (pr->p_name, name_len );
-		
+
 	while ( ( cups_check_printer ( pr, printers, 0 )) && count < 100)
 	{
 		memset ( pr->p_name, 0, name_len);
@@ -485,11 +479,11 @@ static int cups_mangle_printer_name ( struct printer *pr, struct printer *printe
 		sprintf ( pr->p_name, "%s#%2.2u", pr->p_name, count++);
 	}
 
-	if ( count > 99) 
+	if ( count > 99)
 		return (2);
-	
+
 	return (0);
-}	
+}
 
 /*------------------------------------------------------------------------*/
 
@@ -548,14 +542,14 @@ static int convert_to_mac_name ( const char * encoding, char * inptr, char * out
 		/* charset conversion failed, use ascii fallback */
 		name_len = to_ascii ( inptr, &outbuf );
 	}
-	
+
 	soptr = outptr;
 
 	for ( i=0; i< name_len && i < outlen-1 ; i++)
 	{
-		if ( outbuf[i] == '_' )	
+		if ( outbuf[i] == '_' )
 			*soptr = ' '; /* Replace '_' with a space (just for the looks) */
-		else if ( outbuf[i] == '@' || outbuf[i] == ':' ) 
+		else if ( outbuf[i] == '@' || outbuf[i] == ':' )
 			*soptr = '_'; /* Replace @ and : with '_' as they are illegal chars */
 		else
 			*soptr = outbuf[i];
@@ -610,7 +604,7 @@ int cups_check_printer ( struct printer *pr, struct printer *printers, int repla
 		}
 		listprev = listptr;
 		listptr = listptr->p_next;
-	}	
+	}
 	return (0);	/* No conflict */
 }
 
@@ -627,7 +621,7 @@ cups_free_printer ( struct printer *pr)
 		free (pr->p_printer);
 	if ( pr->p_ppdfile != NULL)
 		free (pr->p_ppdfile);
-	
+
 	/* CUPS autoadded printers share the other informations
 	 * so if the printer is autoadded we won't free them.
 	 * We might leak some bytes here though.
@@ -645,10 +639,10 @@ cups_free_printer ( struct printer *pr)
 		free (pr->p_type);
 	if ( pr->p_authprintdir != NULL )
 		free (pr->p_authprintdir);
-	
+
 	free ( pr );
 	return;
-	
+
 }
-	
+
 #endif /* HAVE_CUPS*/

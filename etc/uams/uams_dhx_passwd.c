@@ -2,7 +2,7 @@
  * $Id: uams_dhx_passwd.c,v 1.29 2010-03-30 12:44:35 franklahm Exp $
  *
  * Copyright (c) 1990,1993 Regents of The University of Michigan.
- * Copyright (c) 1999 Adrian Sun (asun@u.washington.edu) 
+ * Copyright (c) 1999 Adrian Sun (asun@u.washington.edu)
  * All Rights Reserved.  See COPYRIGHT.
  */
 
@@ -103,7 +103,7 @@ static int pwd_login(void *obj, char *username, int ulen, struct passwd **uam_pw
     if (( dhxpwd = uam_getname(obj, username, ulen)) == NULL ) {
         return AFPERR_NOTAUTH;
     }
-    
+
     LOG(log_info, logtype_uams, "dhx login: %s", username);
     if (uam_checkuser(dhxpwd) < 0)
       return AFPERR_NOTAUTH;
@@ -145,26 +145,26 @@ static int pwd_login(void *obj, char *username, int ulen, struct passwd **uam_pw
     }
 
     /* generate key and make sure we have enough space */
-    dh->p = pbn;
-    dh->g = gbn;
-    if (!DH_generate_key(dh) || (BN_num_bytes(dh->pub_key) > KEYSIZE)) {
+    DH_set0_pqg(dh, pbn, NULL, gbn);
+
+    if (!DH_generate_key(dh) || (BN_num_bytes(DH_get0_pub_key(dh)) > KEYSIZE)) {
       goto passwd_fail;
     }
 
     /* figure out the key. use rbuf as a temporary buffer. */
     i = DH_compute_key((unsigned char *)rbuf, bn, dh);
-    
+
     /* set the key */
     CAST_set_key(&castkey, i, (unsigned char *)rbuf);
-    
+
     /* session id. it's just a hashed version of the object pointer. */
     sessid = dhxhash(obj);
     memcpy(rbuf, &sessid, sizeof(sessid));
     rbuf += sizeof(sessid);
     *rbuflen += sizeof(sessid);
-    
+
     /* send our public key */
-    BN_bn2bin(dh->pub_key, (unsigned char *)rbuf); 
+    BN_bn2bin(DH_get0_pub_key(dh), (unsigned char *)rbuf);
     rbuf += KEYSIZE;
     *rbuflen += KEYSIZE;
 
@@ -174,17 +174,17 @@ static int pwd_login(void *obj, char *username, int ulen, struct passwd **uam_pw
 			     &i) < 0) {
       *rbuflen = 0;
       goto passwd_fail;
-    }    
+    }
     memcpy(rbuf, &randbuf, sizeof(randbuf));
 
 #if 0
     /* get the signature. it's always 16 bytes. */
-    if (uam_afpserver_option(obj, UAM_OPTION_SIGNATURE, 
+    if (uam_afpserver_option(obj, UAM_OPTION_SIGNATURE,
 			     (void *) &name, NULL) < 0) {
       *rbuflen = 0;
       goto passwd_fail;
     }
-    memcpy(rbuf + KEYSIZE, name, KEYSIZE); 
+    memcpy(rbuf + KEYSIZE, name, KEYSIZE);
 #else /* 0 */
     memset(rbuf + KEYSIZE, 0, KEYSIZE);
 #endif /* 0 */
@@ -235,10 +235,10 @@ static int passwd_login(void *obj, struct passwd **uam_pwd,
 	ibuflen--;
     }
     return (pwd_login(obj, username, ulen, uam_pwd, ibuf, ibuflen, rbuf, rbuflen));
-    
+
 }
 
-/* cleartxt login ext 
+/* cleartxt login ext
  * uname format :
     byte      3
     2 bytes   len (network order)
@@ -253,7 +253,7 @@ static int passwd_login_ext(void *obj, char *uname, struct passwd **uam_pwd,
     u_int16_t  temp16;
 
     *rbuflen = 0;
-    
+
     if (uam_afpserver_option(obj, UAM_OPTION_USERNAME,
 			     (void *) &username, &ulen) < 0)
 	return AFPERR_MISC;
@@ -270,9 +270,9 @@ static int passwd_login_ext(void *obj, char *uname, struct passwd **uam_pwd,
     username[ len ] = '\0';
     return (pwd_login(obj, username, ulen, uam_pwd, ibuf, ibuflen, rbuf, rbuflen));
 }
-			
+
 static int passwd_logincont(void *obj, struct passwd **uam_pwd,
-			    char *ibuf, size_t ibuflen _U_, 
+			    char *ibuf, size_t ibuflen _U_,
 			    char *rbuf, size_t *rbuflen)
 {
 #ifdef SHADOWPW
@@ -291,11 +291,11 @@ static int passwd_logincont(void *obj, struct passwd **uam_pwd,
     if (sessid != dhxhash(obj))
       return AFPERR_PARAM;
     ibuf += sizeof(sessid);
-   
+
     /* use rbuf as scratch space */
     CAST_cbc_encrypt((unsigned char *)ibuf, (unsigned char *)rbuf, CRYPT2BUFLEN, &castkey,
 		     iv, CAST_DECRYPT);
-    
+
     /* check to make sure that the random number is the same. we
      * get sent back an incremented random number. */
     if (!(bn1 = BN_bin2bn((unsigned char *)rbuf, KEYSIZE, NULL)))
@@ -305,7 +305,7 @@ static int passwd_logincont(void *obj, struct passwd **uam_pwd,
       BN_free(bn1);
       return AFPERR_PARAM;
     }
-      
+
     /* zero out the random number */
     memset(rbuf, 0, sizeof(randbuf));
     memset(randbuf, 0, sizeof(randbuf));
