@@ -76,7 +76,7 @@ void uuid_string2bin( const char *uuidstring, uuidp_t uuid) {
     int nibble = 1;
     int i = 0;
     unsigned char c, val = 0;
-    
+
     while (*uuidstring && i < UUID_BINSIZE) {
         c = *uuidstring;
         if (c == '-') {
@@ -113,14 +113,16 @@ const char *uuid_bin2string(unsigned char *uuid) {
     unsigned char c;
 
 #ifdef HAVE_LDAP
+#ifdef HAVE_ACLS
     if (ldap_uuid_string)
         uuidmask = ldap_uuid_string;
     else
 #endif
+#endif
         uuidmask = "xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx";
 
     LOG(log_debug, logtype_afpd, "uuid_bin2string{uuid}: mask: %s", uuidmask);
-		
+
     while (i < strlen(uuidmask)) {
         c = *uuid;
         uuid++;

@@ -2,7 +2,7 @@
  * $Id: uams_dhx_pam.c,v 1.33 2010-03-30 10:25:49 franklahm Exp $
  *
  * Copyright (c) 1990,1993 Regents of The University of Michigan.
- * Copyright (c) 1999 Adrian Sun (asun@u.washington.edu) 
+ * Copyright (c) 1999 Adrian Sun (asun@u.washington.edu)
  * All Rights Reserved.  See COPYRIGHT.
  */
 
@@ -71,7 +71,7 @@ static const u_int8_t g = 0x07;
 /* Static variables used to communicate between the conversation function
  * and the server_login function
  */
-static pam_handle_t *pamh = NULL; 
+static pam_handle_t *pamh = NULL;
 static char *PAM_username;
 static char *PAM_password;
 
@@ -85,9 +85,9 @@ static int PAM_conv (int num_msg,
                      void *appdata_ptr _U_) {
   int count = 0;
   struct pam_response *reply;
-  
+
 #define COPY_STRING(s) (s) ? strdup(s) : NULL
-  
+
   errno = 0;
 
   if (num_msg < 1) {
@@ -98,7 +98,7 @@ static int PAM_conv (int num_msg,
     return PAM_CONV_ERR;
   }
 
-  reply = (struct pam_response *) 
+  reply = (struct pam_response *)
     calloc(num_msg, sizeof(struct pam_response));
 
   if (!reply) {
@@ -146,7 +146,7 @@ static int PAM_conv (int num_msg,
       goto pam_fail_conv;
     }
 
-    if (string) {  
+    if (string) {
       reply[count].resp_retcode = 0;
       reply[count].resp = string;
       string = NULL;
@@ -167,7 +167,7 @@ pam_fail_conv:
     case PAM_PROMPT_ECHO_OFF:
     case PAM_PROMPT_ECHO_ON:
       free(reply[count].resp);
-      break;      
+      break;
     }
   }
   free(reply);
@@ -184,7 +184,7 @@ static struct pam_conv PAM_conversation = {
 };
 
 
-static int dhx_setup(void *obj, char *ibuf, size_t ibuflen _U_, 
+static int dhx_setup(void *obj, char *ibuf, size_t ibuflen _U_,
 		     char *rbuf, size_t *rbuflen)
 {
     u_int16_t sessid;
@@ -234,40 +234,40 @@ static int dhx_setup(void *obj, char *ibuf, size_t ibuflen _U_,
     }
 
     /* generate key and make sure that we have enough space */
-    dh->p = pbn;
-    dh->g = gbn;
+    DH_set0_pqg(dh, pbn, NULL, gbn);
+
     if (DH_generate_key(dh) == 0) {
-	unsigned long dherror;
-	char errbuf[256];
+        unsigned long dherror;
+        char errbuf[256];
 
-	ERR_load_crypto_strings();
-	dherror = ERR_get_error();
-	ERR_error_string_n(dherror, errbuf, 256);
+        ERR_load_crypto_strings();
+        dherror = ERR_get_error();
+        ERR_error_string_n(dherror, errbuf, 256);
 
-	LOG(log_info, logtype_uams, "uams_dhx_pam.c :PAM: Err Generating Key (OpenSSL error code: %u, %s)", dherror, errbuf);
+        LOG(log_info, logtype_uams, "uams_dhx_pam.c :PAM: Err Generating Key (OpenSSL error code: %u, %s)", dherror, errbuf);
 
-	ERR_free_strings();
-	goto pam_fail;
+        ERR_free_strings();
+        goto pam_fail;
     }
-    if (BN_num_bytes(dh->pub_key) > KEYSIZE) {
-	LOG(log_info, logtype_uams, "uams_dhx_pam.c :PAM: Err Generating Key -- Not enough Space? -- %s", strerror(errno));
-	goto pam_fail;
+    if (BN_num_bytes(DH_get0_pub_key(dh)) > KEYSIZE) {
+        LOG(log_info, logtype_uams, "uams_dhx_pam.c :PAM: Err Generating Key -- Not enough Space? -- %s", strerror(errno));
+        goto pam_fail;
     }
 
     /* figure out the key. store the key in rbuf for now. */
     i = DH_compute_key(rbuf, bn, dh);
-    
+
     /* set the key */
     CAST_set_key(&castkey, i, rbuf);
-    
+
     /* session id. it's just a hashed version of the object pointer. */
     sessid = dhxhash(obj);
     memcpy(rbuf, &sessid, sizeof(sessid));
     rbuf += sizeof(sessid);
     *rbuflen += sizeof(sessid);
-    
+
     /* public key */
-    BN_bn2bin(dh->pub_key, rbuf); 
+    BN_bn2bin(DH_get0_pub_key(dh), rbuf);
     rbuf += KEYSIZE;
     *rbuflen += KEYSIZE;
 
@@ -281,12 +281,12 @@ static int dhx_setup(void *obj, char *ibuf, size_t ibuflen _U_,
 		  strerror(errno));
     /* Log Entry */
       goto pam_fail;
-    }    
+    }
     memcpy(rbuf, &randbuf, sizeof(randbuf));
 
     /* get the signature. it's always 16 bytes. */
 #if 0
-    if (uam_afpserver_option(obj, UAM_OPTION_SIGNATURE, 
+    if (uam_afpserver_option(obj, UAM_OPTION_SIGNATURE,
 			     (void *) &buf, NULL) < 0) {
       *rbuflen = 0;
     /* Log Entry */
@@ -295,13 +295,13 @@ static int dhx_setup(void *obj, char *ibuf, size_t ibuflen _U_,
     /* Log Entry */
       goto pam_fail;
     }
-    memcpy(rbuf + KEYSIZE, buf, KEYSIZE); 
+    memcpy(rbuf + KEYSIZE, buf, KEYSIZE);
 #else /* 0 */
-    memset(rbuf + KEYSIZE, 0, KEYSIZE); 
+    memset(rbuf + KEYSIZE, 0, KEYSIZE);
 #endif /* 0 */
 
     /* encrypt using cast */
-    CAST_cbc_encrypt(rbuf, rbuf, CRYPTBUFLEN, &castkey, msg2_iv, 
+    CAST_cbc_encrypt(rbuf, rbuf, CRYPTBUFLEN, &castkey, msg2_iv,
 		     CAST_ENCRYPT);
     *rbuflen += CRYPTBUFLEN;
     BN_free(bn);
@@ -407,7 +407,7 @@ static int pam_login_ext(void *obj, char *uname, struct passwd **uam_pwd,
 /* -------------------------------- */
 
 static int pam_logincont(void *obj, struct passwd **uam_pwd,
-			 char *ibuf, size_t ibuflen _U_, 
+			 char *ibuf, size_t ibuflen _U_,
 			 char *rbuf, size_t *rbuflen)
 {
     const char *hostname;
@@ -427,7 +427,7 @@ static int pam_logincont(void *obj, struct passwd **uam_pwd,
       return AFPERR_PARAM;
     }
     ibuf += sizeof(sessid);
-    
+
     if (uam_afpserver_option(obj, UAM_OPTION_CLIENTNAME,
 			     (void *) &hostname, NULL) < 0)
 	{
@@ -448,7 +448,7 @@ static int pam_logincont(void *obj, struct passwd **uam_pwd,
       BN_free(bn1);
       return AFPERR_PARAM;
     }
-      
+
     /* zero out the random number */
     memset(rbuf, 0, sizeof(randbuf));
     memset(randbuf, 0, sizeof(randbuf));
@@ -491,14 +491,14 @@ static int pam_logincont(void *obj, struct passwd **uam_pwd,
     pam_set_item(pamh, PAM_RHOST, hostname);
     PAM_error = pam_authenticate(pamh,0);
     if (PAM_error != PAM_SUCCESS) {
-      if (PAM_error == PAM_MAXTRIES) 
+      if (PAM_error == PAM_MAXTRIES)
 	err = AFPERR_PWDEXPR;
     /* Log Entry */
            LOG(log_info, logtype_uams, "uams_dhx_pam.c :PAM: PAM_Error: %s",
 		  pam_strerror(pamh, PAM_error));
     /* Log Entry */
       goto logincont_err;
-    }      
+    }
 
     PAM_error = pam_acct_mgmt(pamh, 0);
     if (PAM_error != PAM_SUCCESS ) {
@@ -509,7 +509,7 @@ static int pam_logincont(void *obj, struct passwd **uam_pwd,
       if (PAM_error == PAM_NEW_AUTHTOK_REQD)	/* password expired */
 	err = AFPERR_PWDEXPR;
 #ifdef PAM_AUTHTOKEN_REQD
-      else if (PAM_error == PAM_AUTHTOKEN_REQD) 
+      else if (PAM_error == PAM_AUTHTOKEN_REQD)
 	err = AFPERR_PWDCHNG;
 #endif
       else
@@ -582,7 +582,7 @@ static int pam_changepw(void *obj, char *username,
     /* grab the id */
     memcpy(&sessid, ibuf, sizeof(sessid));
     ibuf += sizeof(sessid);
-    
+
     if (!sessid) {  /* no sessid -> initialization phase */
       PAM_username = username;
       ibuflen -= sizeof(sessid);
@@ -634,7 +634,7 @@ static int pam_changepw(void *obj, char *username,
     /* Log Entry */
       return AFPERR_PARAM;
     }
-      
+
     /* zero out the random number */
     memset(rbuf, 0, sizeof(randbuf));
     memset(randbuf, 0, sizeof(randbuf));
@@ -717,11 +717,11 @@ static int pam_changepw(void *obj, char *username,
 
 static int uam_setup(const char *path)
 {
-  if (uam_register(UAM_SERVER_LOGIN_EXT, path, "DHCAST128", pam_login, 
+  if (uam_register(UAM_SERVER_LOGIN_EXT, path, "DHCAST128", pam_login,
 		   pam_logincont, pam_logout, pam_login_ext) < 0)
     return -1;
 
-  if (uam_register(UAM_SERVER_CHANGEPW, path, "DHCAST128", 
+  if (uam_register(UAM_SERVER_CHANGEPW, path, "DHCAST128",
 		   pam_changepw) < 0) {
     uam_unregister(UAM_SERVER_LOGIN, "DHCAST128");
     return -1;
